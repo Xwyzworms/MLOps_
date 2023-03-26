@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+message Employee {
+
+    // 1 to 15 take one byte
+    int32 id = 1;
+    string name = 2;
+    float salary = 3;
+    // 15 > take 2 byte
+
+}
+
+message Employees {
+    repeated Employee employees = 1;
+}
