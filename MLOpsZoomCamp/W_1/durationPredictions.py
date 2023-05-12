@@ -63,6 +63,9 @@ def fitLinearModel(x_train, y_train, x_test, y_test,type: str):
     linReg.fit(x_train, y_train)
 
     y_pred =linReg.predict(x_test)
+    with open("models/linReg.bin", "wb") as fuf:
+        pickle.dump((dv, linReg), fuf)
+    
     sns.distplot(y_pred,bins=10, label=f"Prediction using {type} Regression")
     sns.distplot(y_test,bins=10, label="True Label")
     mlFlowMetricParamRequirements(mean_squared_error(y_test,y_pred,squared=False))
@@ -125,4 +128,81 @@ with mlflow.start_run():
     Y_train = df[target].values
     Y_test = df_test[target].values
     fitLinearModel(X_train, Y_train, X_test, Y_test,"linreg" )
+    mlflow.log_artifact(local_path="models/linReg.bin", artifact_path="modelsPreprocessor")
 #%%
+#### ML Flow autoLog using xgboost
+import xgboost as xgb   
+from hyperopt import fmin, tpe, hp, STATUS_OK, Trials
+from hyperopt.pyll import scope
+
+train_xgb = xgb.DMatrix(X_train, label=Y_train)
+test_xgb = xgb.DMatrix(X_test, Y_test)
+
+def objective(params):
+    with mlflow.start_run():
+        mlflow.set_tag("model", "xgboost_v1")
+        mlflow.xgboost.autolog()
+
+        booster = xgb.train(params=params,
+                             dtrain=train_xgb,
+                             num_boost_round=100,
+                             evals=[(test_xgb, "validation")],
+                             early_stopping_rounds=50
+                             )
+        yPred = booster.predict(test_xgb)
+        rmse = mean_squared_error(Y_test, yPred, squared=False)
+        mlflow.log_metric("RMSE", rmse)
+
+    return {"loss" : rmse, "status" : STATUS_OK}
+
+search_space = {
+    "max_depth" : scope.int(hp.quniform("max_depth", 4, 100, 1)),
+    "learning_rate" : hp.loguniform("learning_rate", -3, 0),
+    "reg_alpha" : hp.loguniform("reg_alpha", -5, -1),
+    "reg_lambda" : hp.loguniform("reg_lambda", -6, -1),
+    "min_child_weight": hp.loguniform("min_child_weight", 1,3),
+    "objective" : "reg:linear",
+    "seed" : 42,
+} 
+#%%
+xgboostResult = fmin(
+    fn=objective,
+    space=search_space,
+    algo=tpe.suggest,
+    max_evals=20,
+    trials= Trials()
+)
+
+#%% 
+## Using best parameters 
+params = {
+    "custom_metric":	None,
+    "early_stopping_rounds" :	50,
+    "learning_rate":	0.2615664281684017,
+    "max_depth":	24,
+    "maximize":	None,
+    "min_child_weight":	18.714937722242695,
+    "num_boost_round":	100,
+    "objective":"reg:linear",
+    "reg_alpha"	:0.055991915605540066,
+    "reg_lambda":	0.037685837026633744,
+    "seed"	:42,
+    "verbose_eval"	:True,
+}
+
+
+booster = xgb.train(params=params,
+                        dtrain=train_xgb,
+                        num_boost_round=100,
+                        evals=[(test_xgb, "validation")],
+                        early_stopping_rounds=50
+                        )
+yPred = booster.predict(test_xgb)
+with open("models_best/1/dataPreprocessor.b","wb") as fuf:
+    pickle.dump(dv, fuf)
+
+rmse = mean_squared_error(Y_test, yPred, squared=False)
+mlflow.log_metric("RMSE", rmse)
+mlflow.xgboost.log_model(booster, artifact_path="modelPreprocessor")
+mlflow.log_artifact(local_path="models_best/1/dataPreprocessor.b", artifact_path="dataPreprocessor")
+# %%
