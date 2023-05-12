@@ -138,10 +138,10 @@ from hyperopt.pyll import scope
 train_xgb = xgb.DMatrix(X_train, label=Y_train)
 test_xgb = xgb.DMatrix(X_test, Y_test)
 
+mlflow.xgboost.autolog()
 def objective(params):
     with mlflow.start_run():
         mlflow.set_tag("model", "xgboost_v1")
-        mlflow.xgboost.autolog()
 
         booster = xgb.train(params=params,
                              dtrain=train_xgb,
